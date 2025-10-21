@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 import geopandas as gpd
-import gdal
+from osgeo import gdal
 import rasterio
 
 from . import coco
