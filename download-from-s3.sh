@@ -8,10 +8,12 @@
 # Exit when error occurs
 set -e
 
-echo "===== Downloading RGB+LiDAR merged data (~22GB) ... ====="
-aws s3 cp s3://aws-satellite-lidar-tutorial/data/ ./data/ --recursive --no-sign-request
+echo "===== Syncing RGB+LiDAR merged data (~22GB) ... ====="
+# Use 'sync' to only download missing or updated files
+aws s3 sync s3://aws-satellite-lidar-tutorial/data/ ./data/ --no-sign-request
 
-echo "===== Downloading pretrained model weights (617MB) ... ====="
-aws s3 cp s3://aws-satellite-lidar-tutorial/models/ ./models/ --recursive --no-sign-request
+echo "===== Syncing pretrained model weights (617MB) ... ====="
+# Use 'sync' to only download missing or updated files
+aws s3 sync s3://aws-satellite-lidar-tutorial/models/ ./models/ --no-sign-request
 
-echo "===== Downloading completes. ====="
+echo "===== Syncing completes. ====="
