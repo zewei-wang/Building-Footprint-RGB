@@ -74,6 +74,17 @@ class Inferer(object):
             augmentations=process_aug_dict(
                 self.config['inference_augmentation'])
             )
+        device = torch.device('cpu')
+        using_cuda = False
+        if self.framework in ['torch', 'pytorch']:
+            using_cuda = torch.cuda.is_available()
+            if using_cuda:
+                device = torch.device('cuda')
+                torch.cuda.empty_cache()
+                self.model = self.model.cuda()
+                if not getattr(self, '_half_precision_enabled', False):
+                    self.model = self.model.half()
+                    self._half_precision_enabled = True
         for idx, im_path in tqdm(enumerate(infer_df['image']),
                                  total=len(infer_df['image'])):
             inf_input, idx_refs, (
@@ -84,34 +95,35 @@ class Inferer(object):
                                                   batch_size=self.batch_size)
 
             elif self.framework in ['torch', 'pytorch']:
-                with torch.no_grad():
-                    self.model.eval()
-                if torch.cuda.is_available():
-                    device = torch.device('cuda')
-                    self.model = self.model.cuda()
+                inf_input = torch.from_numpy(inf_input)
+                if using_cuda:
+                    inf_input = inf_input.half().to(device)
                 else:
-                    device = torch.device('cpu')
-                inf_input = torch.from_numpy(inf_input).float().to(device)
+                    inf_input = inf_input.float().to(device)
                 # add additional input data, if applicable
                 if self.config['data_specs'].get('additional_inputs',
                                                  None) is not None:
                     inf_input = [inf_input]
                     for i in self.config['data_specs']['additional_inputs']:
-                        inf_input.append(
-                            infer_df[i].iloc[idx].to(device))
+                        aux_tensor = infer_df[i].iloc[idx].to(device)
+                        if using_cuda and aux_tensor.dtype == torch.float32:
+                            aux_tensor = aux_tensor.half()
+                        inf_input.append(aux_tensor)
 
                 # Revision: allow batch process to save Mem cost.
                 subarr_preds_list = []
-                for batch_i in range(0, inf_input.shape[0], self.batch_size):
-                    if batch_i + self.batch_size <= inf_input.shape[0]:
-                        subarr_pred = self.model(inf_input[
-                            batch_i:batch_i+self.batch_size, ...
-                        ])
-                    else:
-                        subarr_pred = self.model(inf_input[
-                            batch_i:, ...
-                        ])
-                    subarr_preds_list.append(subarr_pred.cpu().data.numpy())
+                self.model.eval()
+                with torch.no_grad():
+                    for batch_i in range(0, inf_input.shape[0], self.batch_size):
+                        if batch_i + self.batch_size <= inf_input.shape[0]:
+                            subarr_pred = self.model(inf_input[
+                                batch_i:batch_i+self.batch_size, ...
+                            ])
+                        else:
+                            subarr_pred = self.model(inf_input[
+                                batch_i:, ...
+                            ])
+                        subarr_preds_list.append(subarr_pred.cpu().data.numpy())
                 subarr_preds = np.concatenate(subarr_preds_list, axis=0)
             stitched_result = stitch_images(subarr_preds,
                                             idx_refs=idx_refs,

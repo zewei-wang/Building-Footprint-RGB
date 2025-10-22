@@ -6,7 +6,7 @@ infer: true
 
 pretrained: false
 nn_framework: torch
-batch_size: 20
+batch_size: 2
 
 data_specs:
     width: 512
