@@ -33,6 +33,12 @@ training_augmentation:
             p: 0.5
         RandomRotate90:
             p: 0.5
+        GaussNoise:
+            var_limit: 50.0
+            p: 0.3
+        MedianBlur:
+            blur_limit: 3
+            p: 0.2
         RandomCrop:
             height: 512
             width: 512
