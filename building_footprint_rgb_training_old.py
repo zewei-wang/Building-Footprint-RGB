@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Extract setup-to-training cells from Building-Footprint-RGB.ipynb."""
+"""RGB-only training script using the augmentation-trimmed config."""
 
+import argparse
 import json  # noqa: F401 - mirrored from notebook imports
 import os
 import random  # noqa: F401 - mirrored from notebook imports
@@ -90,7 +91,7 @@ def build_dataframes(img_dir: str, mask_dir: str) -> Tuple[pd.DataFrame, pd.Data
     train_df = pd.read_csv(train_csv_path)
     test_df = pd.read_csv(test_csv_path)
 
-    train_subset_frac = 1
+    train_subset_frac = 0.1
     train_small_df = train_df.sample(frac=train_subset_frac, random_state=42)
     train_small_csv_path = './data/buildings/split_train_data_small.csv'
     train_small_df.to_csv(train_small_csv_path, index=False)
@@ -105,21 +106,30 @@ def build_dataframes(img_dir: str, mask_dir: str) -> Tuple[pd.DataFrame, pd.Data
     return train_df, test_df, train_small_df
 
 
-def configure_training(train_small_csv_path: str, test_csv_path: str) -> Tuple[dict, sol.nets.train.Trainer]:
-    """Prepare the solaris Trainer using the RGB-only configuration."""
-    config = sol.utils.config.parse('./configs/buildings/RGB-only.yml')
+def configure_training(
+    train_small_csv_path: str,
+    test_csv_path: str,
+    model_run_name: str,
+) -> Tuple[dict, sol.nets.train.Trainer]:
+    """Prepare the solaris Trainer using the GaussNoise/Blur-free config and paths."""
+    config = sol.utils.config.parse('./configs/buildings/RGB-only-old.yml')
     config['training_data_csv'] = train_small_csv_path
     config['inference_data_csv'] = test_csv_path
 
-    model_ckpt_dir = Path(config['training']['callbacks']['model_checkpoint']['filepath']).parent
-    model_ckpt_dir.mkdir(parents=True, exist_ok=True)
-    model_dest_dir = Path(config['training']['model_dest_path']).parent
-    model_dest_dir.mkdir(parents=True, exist_ok=True)
-    results_dir = Path(config['inference']['output_dir']).parent
+    checkpoint_path = Path('./models/buildings') / model_run_name / 'checkpoint.pth'
+    model_dest_path = Path('./models/buildings') / f'{model_run_name}.pth'
+    results_dir = Path('./results/buildings') / model_run_name / 'pred_mask'
+
+    config['training']['callbacks']['model_checkpoint']['filepath'] = str(checkpoint_path)
+    config['training']['model_dest_path'] = str(model_dest_path)
+    config['inference']['output_dir'] = str(results_dir)
+
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    model_dest_path.parent.mkdir(parents=True, exist_ok=True)
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    print('Checkpoint dir:', model_ckpt_dir)
-    print('Model dir:', model_dest_dir)
+    print('Checkpoint dir:', checkpoint_path.parent)
+    print('Model path:', model_dest_path)
     print('Results dir:', results_dir)
 
     custom_model = get_modified_vgg16_unet(in_channels=config['data_specs']['channels'])
@@ -134,7 +144,7 @@ def configure_training(train_small_csv_path: str, test_csv_path: str) -> Tuple[d
     return config, trainer
 
 
-def main(run_training: bool = False) -> None:
+def main(run_training: bool = False, model_run_name: str = 'RGB-only-old') -> None:
     print(sys.executable)
     plt.style.use('seaborn-notebook')
 
@@ -151,13 +161,34 @@ def main(run_training: bool = False) -> None:
     train_small_csv_path = './data/buildings/split_train_data_small.csv'
     test_csv_path = './data/buildings/split_blind_test.csv'
 
-    config, trainer = configure_training(train_small_csv_path, test_csv_path)
+    config, trainer = configure_training(train_small_csv_path, test_csv_path, model_run_name)
 
     if run_training:
         trainer.train()
     else:
-        print('Training skipped. Pass run_training=True to main() to enable it.')
+        print('Training skipped. Pass --train to run the training loop.')
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description='Train the RGB-only-old model without GaussNoise/Blur augmentations.'
+    )
+    parser.add_argument(
+        '--train',
+        action='store_true',
+        help='Enable the actual training loop (disabled by default).',
+    )
+    parser.add_argument(
+        '--model-run-name',
+        default='RGB-only-old',
+        help=(
+            'Name injected into ./models/buildings/<run>/checkpoint.pth and '
+            './results/buildings/<run>/pred_mask. Use unique names to avoid overwrites.'
+        ),
+    )
+    return parser.parse_args()
 
 
 if __name__ == '__main__':
-    main(run_training=True)
+    args = parse_args()
+    main(run_training=args.train, model_run_name=args.model_run_name)
