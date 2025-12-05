@@ -1,6 +1,5 @@
 # Custom items for this repo
 data
-results
 models
 libs/solaris/nets/weights/*
 

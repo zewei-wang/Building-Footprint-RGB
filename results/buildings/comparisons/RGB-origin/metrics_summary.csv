@@ -1,0 +1,2 @@
+avg_precision,avg_recall,avg_f1,avg_mean_iou,total_true_pos,total_false_pos,total_false_neg,num_images,model
+0.7855552703239257,0.7285071445839206,0.7483356772934906,0.7763076259509586,21832,3237,5459,951,RGB-origin
